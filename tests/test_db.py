@@ -63,16 +63,17 @@ def test_unregister_removes_dataset(conn: sqlite3.Connection) -> None:
     assert db.get_dataset(conn, "sales") is None
 
 
-def test_set_row_count(conn: sqlite3.Connection) -> None:
+def test_adjust_row_count(conn: sqlite3.Connection) -> None:
     db.register_dataset(conn, SALES)
     conn.commit()
 
-    db.set_row_count(conn, "sales", 42)
+    db.adjust_row_count(conn, "sales", 1)
+    db.adjust_row_count(conn, "sales", -2)
     conn.commit()
 
     dataset = db.get_dataset(conn, "sales")
     assert dataset is not None
-    assert dataset.row_count == 42
+    assert dataset.row_count == 2
 
 
 def test_app_lifespan_opens_database(client: TestClient) -> None:

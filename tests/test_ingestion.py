@@ -194,6 +194,13 @@ def test_unsanitized_dataset_name_is_a_caller_error(conn: sqlite3.Connection) ->
         ingestion.ingest_csv(conn, 'x"; DROP TABLE _registry;--', b"a\n1\n")
 
 
+def test_utf16_csv_with_bom_is_ingested(conn: sqlite3.Connection) -> None:
+    dataset = ingest(conn, "d", "id,name\n1,ann\n", encoding="utf-16")
+
+    assert [c.name for c in dataset.columns] == ["id", "name"]
+    assert fetch_all(conn, "ds_d")[0]["name"] == "ann"
+
+
 def test_binary_upload_is_rejected(conn: sqlite3.Connection) -> None:
     png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
     with pytest.raises(ingestion.CsvError, match="binary"):

@@ -44,9 +44,15 @@ def _validate_value(column: str, logical: str, value: Any) -> Any:
     if logical == "real":
         if isinstance(value, bool) or not isinstance(value, int | float):
             raise rejection()
-        if not math.isfinite(value):
+        try:
+            numeric = float(value)
+        except OverflowError:
+            # JSON ints can be arbitrarily large; float() (and even
+            # math.isfinite) raises rather than saturating for them.
+            raise rejection() from None
+        if not math.isfinite(numeric):
             raise rejection()
-        return float(value)
+        return numeric
     if logical == "date":
         if not isinstance(value, str) or not ingestion.is_iso_date(value):
             raise rejection()
@@ -61,11 +67,6 @@ def _row_or_404(conn: sqlite3.Connection, name: str, table: str, row_id: int) ->
     if row is None:
         raise HTTPException(404, f"row {row_id} does not exist in dataset {name!r}")
     return dict(row)
-
-
-def _sync_row_count(conn: sqlite3.Connection, dataset: db.Dataset) -> None:
-    count = conn.execute(f'SELECT COUNT(*) FROM "{dataset.table_name}"').fetchone()[0]
-    db.set_row_count(conn, dataset.name, count)
 
 
 @router.get("")
@@ -104,7 +105,7 @@ async def insert_row(name: str, payload: dict[str, Any], conn: db.Connection) ->
         )
     else:
         cursor = conn.execute(f'INSERT INTO "{table}" DEFAULT VALUES')
-    _sync_row_count(conn, dataset)
+    db.adjust_row_count(conn, name, 1)
     conn.commit()
     return _row_or_404(conn, name, table, cursor.lastrowid or 0)
 
@@ -134,5 +135,5 @@ async def delete_row(name: str, row_id: int, conn: db.Connection) -> None:
     # connection inside an open transaction.
     _row_or_404(conn, name, dataset.table_name, row_id)
     conn.execute(f'DELETE FROM "{dataset.table_name}" WHERE _row_id = ?', (row_id,))
-    _sync_row_count(conn, dataset)
+    db.adjust_row_count(conn, name, -1)
     conn.commit()

@@ -114,6 +114,7 @@ def test_insert_cannot_set_row_id(sales: TestClient) -> None:
         {"order_id": True},
         {"order_id": 2**63},
         {"amount": "not a number"},
+        {"amount": 10**400},
         {"ordered_on": "not-a-date"},
         {"ordered_on": 20260101},
         {"note": 5},

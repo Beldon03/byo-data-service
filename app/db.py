@@ -82,8 +82,10 @@ def unregister_dataset(conn: sqlite3.Connection, name: str) -> None:
     conn.execute("DELETE FROM _registry WHERE name = ?", (name,))
 
 
-def set_row_count(conn: sqlite3.Connection, name: str, row_count: int) -> None:
-    conn.execute("UPDATE _registry SET row_count = ? WHERE name = ?", (row_count, name))
+def adjust_row_count(conn: sqlite3.Connection, name: str, delta: int) -> None:
+    conn.execute(
+        "UPDATE _registry SET row_count = row_count + ? WHERE name = ?", (delta, name)
+    )
 
 
 def get_dataset(conn: sqlite3.Connection, name: str) -> Dataset | None:
