@@ -27,7 +27,7 @@
 <div id="error"></div>
 
 <h2>Upload</h2>
-<input type="file" id="file" accept=".csv,.xlsx,text/csv">
+<input type="file" id="file" accept=".csv,.xlsx,text/csv" multiple>
 <button id="upload-button">Upload</button>
 
 <h2>Datasets</h2>
@@ -142,15 +142,19 @@ async function refreshDatasets() {
 
 async function upload() {
   const input = $("file");
-  if (!input.files.length) { setError("choose a CSV file first"); return; }
+  if (!input.files.length) { setError("choose a file first"); return; }
   const form = new FormData();
-  form.append("file", input.files[0]);
+  const batch = input.files.length > 1;
+  for (const file of input.files) form.append(batch ? "files" : "file", file);
   try {
     setError("");
-    const created = await api("/datasets", { method: "POST", body: form });
+    const created = await api(batch ? "/datasets/batch" : "/datasets", {
+      method: "POST",
+      body: form,
+    });
     input.value = "";
     await refreshDatasets();
-    await openDataset(created.name);
+    await openDataset(batch ? created[0].name : created.name);
   } catch (error) { setError(error.message); }
 }
 

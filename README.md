@@ -76,6 +76,15 @@ curl -F "file=@/path/to/My Data.csv" http://localhost:8000/datasets   # dataset 
 XLSX works the same way (`curl -F "file=@report.xlsx" ...`); the active sheet
 is ingested through the same pipeline.
 
+### Upload multiple files at once
+
+```bash
+curl -F "files=@sales.csv" -F "files=@customers.csv" http://localhost:8000/datasets/batch
+```
+
+Returns the list of created datasets. The batch is atomic: if any file fails
+(malformed content or a name conflict), nothing is ingested.
+
 ### List datasets
 
 ```bash

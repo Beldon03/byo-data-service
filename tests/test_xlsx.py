@@ -134,6 +134,19 @@ def test_xlsx_upload_end_to_end(client: TestClient) -> None:
     assert rows[0]["ordered_on"] == "2026-01-15"
 
 
+def test_batch_upload_mixes_csv_and_xlsx(client: TestClient) -> None:
+    response = client.post(
+        "/datasets/batch",
+        files=[
+            ("files", ("plain.csv", b"a\n1\n", "text/csv")),
+            ("files", ("book.xlsx", build_xlsx([["x"], [1]]), "application/octet-stream")),
+        ],
+    )
+
+    assert response.status_code == 201
+    assert [d["name"] for d in response.json()] == ["plain", "book"]
+
+
 def test_corrupt_xlsx_upload_returns_400(client: TestClient) -> None:
     response = client.post(
         "/datasets", files={"file": ("bad.xlsx", b"PK\x03\x04 broken", "application/zip")}

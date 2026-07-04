@@ -15,25 +15,59 @@ def get_dataset_or_404(conn: sqlite3.Connection, name: str) -> db.Dataset:
     return dataset
 
 
-@router.post("", status_code=201)
-async def upload_dataset(file: UploadFile, conn: db.Connection) -> DatasetCreated:
-    name = ingestion.dataset_slug(file.filename or "")
-    if db.get_dataset(conn, name) is not None:
-        raise HTTPException(409, f"dataset {name!r} already exists")
-
-    data = await file.read()
-    if (file.filename or "").lower().endswith(".xlsx"):
+def _parse_and_ingest(
+    conn: sqlite3.Connection, name: str, filename: str, data: bytes
+) -> db.Dataset:
+    if filename.lower().endswith(".xlsx"):
         header, rows = xlsx.parse_xlsx(data)
-        dataset = ingestion.ingest_rows(conn, name, header, rows)
-    else:
-        dataset = ingestion.ingest_csv(conn, name, data)
-    conn.commit()
+        return ingestion.ingest_rows(conn, name, header, rows)
+    return ingestion.ingest_csv(conn, name, data)
+
+
+def _to_created(dataset: db.Dataset) -> DatasetCreated:
     return DatasetCreated(
         name=dataset.name,
         table=dataset.table_name,
         columns=[ColumnSchema(name=c.name, type=c.type) for c in dataset.columns],
         row_count=dataset.row_count,
     )
+
+
+@router.post("", status_code=201)
+async def upload_dataset(file: UploadFile, conn: db.Connection) -> DatasetCreated:
+    name = ingestion.dataset_slug(file.filename or "")
+    if db.get_dataset(conn, name) is not None:
+        raise HTTPException(409, f"dataset {name!r} already exists")
+
+    dataset = _parse_and_ingest(conn, name, file.filename or "", await file.read())
+    conn.commit()
+    return _to_created(dataset)
+
+
+@router.post("/batch", status_code=201)
+async def upload_datasets(files: list[UploadFile], conn: db.Connection) -> list[DatasetCreated]:
+    # Validate every name before ingesting anything: an HTTPException raised
+    # after DML would bypass the rollback that CsvError gets, and a 409 for
+    # file three must not leave files one and two behind.
+    names: list[str] = []
+    for file in files:
+        name = ingestion.dataset_slug(file.filename or "")
+        if name in names:
+            raise HTTPException(
+                409, f"file {file.filename!r} duplicates dataset {name!r} within the batch"
+            )
+        if db.get_dataset(conn, name) is not None:
+            raise HTTPException(409, f"dataset {name!r} already exists")
+        names.append(name)
+
+    # One transaction for the whole batch: a malformed file anywhere rolls
+    # back every dataset in it.
+    datasets = [
+        _parse_and_ingest(conn, name, file.filename or "", await file.read())
+        for name, file in zip(names, files, strict=True)
+    ]
+    conn.commit()
+    return [_to_created(dataset) for dataset in datasets]
 
 
 @router.get("")

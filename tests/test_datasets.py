@@ -125,6 +125,49 @@ def test_delete_unknown_dataset_returns_404(client: TestClient) -> None:
     assert client.delete("/datasets/missing").status_code == 404
 
 
+def upload_batch(client: TestClient, *parts: tuple[str, bytes]) -> httpx2.Response:
+    return client.post(
+        "/datasets/batch",
+        files=[("files", (name, data, "text/csv")) for name, data in parts],
+    )
+
+
+def test_batch_upload_creates_all_datasets(client: TestClient) -> None:
+    response = upload_batch(
+        client, ("sales.csv", SALES_CSV), ("customers.csv", b"customer_id,name\n1,ann\n")
+    )
+
+    assert response.status_code == 201
+    assert [d["name"] for d in response.json()] == ["sales", "customers"]
+    assert client.get("/datasets/customers/rows").json()["total"] == 1
+
+
+def test_batch_duplicate_name_within_batch_returns_409(client: TestClient) -> None:
+    response = upload_batch(client, ("sales.csv", SALES_CSV), ("Sales.CSV", SALES_CSV))
+
+    assert response.status_code == 409
+    assert "within the batch" in response.json()["detail"]
+    assert client.get("/datasets").json() == []
+
+
+def test_batch_existing_name_returns_409_and_creates_nothing(client: TestClient) -> None:
+    upload(client)
+
+    response = upload_batch(
+        client, ("customers.csv", b"customer_id\n1\n"), ("sales.csv", SALES_CSV)
+    )
+
+    assert response.status_code == 409
+    assert [d["name"] for d in client.get("/datasets").json()] == ["sales"]
+
+
+def test_batch_is_atomic_when_one_file_is_malformed(client: TestClient) -> None:
+    response = upload_batch(client, ("good.csv", SALES_CSV), ("bad.csv", b"a,b\n1,2,3\n"))
+
+    assert response.status_code == 400
+    assert client.get("/datasets").json() == []
+
+
 def test_binary_upload_returns_400(client: TestClient) -> None:
     response = upload(client, filename="image.csv", data=b"\x89PNG\r\n\x1a\n\x00\x00")
 
