@@ -30,3 +30,12 @@ class RowsPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class QueryRequest(BaseModel):
+    sql: str
+
+
+class QueryResult(BaseModel):
+    columns: list[str]
+    rows: list[list[Any]]

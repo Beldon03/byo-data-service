@@ -39,15 +39,47 @@ class Dataset:
 
 
 def connect(path: str) -> sqlite3.Connection:
-    if path != ":memory:":
+    is_uri = path.startswith("file:")
+    if not is_uri and path != ":memory:":
         parent = os.path.dirname(path)
         if parent:
             os.makedirs(parent, exist_ok=True)
-    # Single shared connection; the assessment explicitly requires no
-    # concurrency guarantees, and one connection keeps :memory: databases
+    # Single shared connection per role; the assessment explicitly requires
+    # no concurrency guarantees, and one connection keeps :memory: databases
     # usable across requests in tests.
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(path, check_same_thread=False, uri=is_uri)
     conn.row_factory = sqlite3.Row
+    return conn
+
+
+_QUERY_ALLOWED_ACTIONS = frozenset(
+    {
+        sqlite3.SQLITE_SELECT,
+        sqlite3.SQLITE_READ,
+        sqlite3.SQLITE_FUNCTION,
+        sqlite3.SQLITE_RECURSIVE,
+    }
+)
+
+
+def _query_authorizer(
+    action: int, arg1: str | None, arg2: str | None, db_name: str | None, source: str | None
+) -> int:
+    # The registry is service metadata, not user data; queries must not see it.
+    if action == sqlite3.SQLITE_READ and arg1 == "_registry":
+        return sqlite3.SQLITE_DENY
+    if action in _QUERY_ALLOWED_ACTIONS:
+        return sqlite3.SQLITE_OK
+    return sqlite3.SQLITE_DENY
+
+
+def connect_query_only(path: str) -> sqlite3.Connection:
+    conn = connect(path)
+    # Two independent layers: query_only makes SQLite refuse writes at the
+    # storage level, and the authorizer rejects non-read operations (and any
+    # _registry access) at statement-compile time.
+    conn.execute("PRAGMA query_only = ON")
+    conn.set_authorizer(_query_authorizer)
     return conn
 
 
@@ -112,4 +144,9 @@ def get_db(request: Request) -> sqlite3.Connection:
     return request.app.state.db
 
 
+def get_query_db(request: Request) -> sqlite3.Connection:
+    return request.app.state.query_db
+
+
 Connection = Annotated[sqlite3.Connection, Depends(get_db)]
+QueryConnection = Annotated[sqlite3.Connection, Depends(get_query_db)]

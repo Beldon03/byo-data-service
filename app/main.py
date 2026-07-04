@@ -1,4 +1,5 @@
 import os
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -7,11 +8,15 @@ from fastapi.responses import JSONResponse
 
 from app import db
 from app.ingestion import CsvError
-from app.routers import datasets, rows
+from app.routers import datasets, query, rows
 
 
 def create_app(db_path: str | None = None) -> FastAPI:
     path = db_path or os.environ.get("DATABASE_PATH", "/data/app.db")
+    if path == ":memory:":
+        # A plain :memory: database is per-connection; the read-only /query
+        # connection must see the same data, so tests get a shared-cache URI.
+        path = f"file:{uuid.uuid4().hex}?mode=memory&cache=shared"
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -19,7 +24,12 @@ def create_app(db_path: str | None = None) -> FastAPI:
         try:
             db.init_registry(conn)
             app.state.db = conn
-            yield
+            query_conn = db.connect_query_only(path)
+            try:
+                app.state.query_db = query_conn
+                yield
+            finally:
+                query_conn.close()
         finally:
             conn.close()
 
@@ -31,6 +41,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
     )
     app.include_router(datasets.router)
     app.include_router(rows.router)
+    app.include_router(query.router)
 
     @app.exception_handler(CsvError)
     async def csv_error_handler(request: Request, exc: CsvError) -> JSONResponse:
