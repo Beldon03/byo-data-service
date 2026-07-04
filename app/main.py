@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app import db
 from app.ingestion import CsvError
-from app.routers import datasets
+from app.routers import datasets, rows
 
 
 def create_app(db_path: str | None = None) -> FastAPI:
@@ -30,6 +30,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(datasets.router)
+    app.include_router(rows.router)
 
     @app.exception_handler(CsvError)
     async def csv_error_handler(request: Request, exc: CsvError) -> JSONResponse:

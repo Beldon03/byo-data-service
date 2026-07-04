@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -21,3 +23,10 @@ class DatasetSummary(BaseModel):
 
 class DatasetSchema(BaseModel):
     columns: list[ColumnSchema]
+
+
+class RowsPage(BaseModel):
+    rows: list[dict[str, Any]]
+    total: int
+    limit: int
+    offset: int

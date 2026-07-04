@@ -12,9 +12,6 @@ from app import db
 SAMPLE_SIZE = 1000
 MAX_COLUMNS = 2000  # SQLite's default SQLITE_MAX_COLUMN
 
-_SQLITE_INT_MIN = -(2**63)
-_SQLITE_INT_MAX = 2**63 - 1
-
 _SQL_TYPES = {"integer": "INTEGER", "real": "REAL", "date": "TEXT", "text": "TEXT"}
 _INT_RE = re.compile(r"^[+-]?\d+$")
 _REAL_RE = re.compile(r"^[+-]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?$")
@@ -60,9 +57,9 @@ def _is_integer(value: str) -> bool:
     digits = v.lstrip("+-")
     if len(digits) > 1 and digits.startswith("0"):
         return False
-    # Python ints are unbounded but SQLite INTEGER is 64-bit; anything wider
-    # must demote (to real via the next inference step) or stay text.
-    return _SQLITE_INT_MIN <= int(v) <= _SQLITE_INT_MAX
+    # Python ints are unbounded; anything wider than 64 bits must demote
+    # (to real via the next inference step) or stay text.
+    return db.INT64_MIN <= int(v) <= db.INT64_MAX
 
 
 def _is_real(value: str) -> bool:
@@ -79,7 +76,7 @@ def _is_real(value: str) -> bool:
     return not math.isinf(float(v))
 
 
-def _is_date(value: str) -> bool:
+def is_iso_date(value: str) -> bool:
     try:
         datetime.fromisoformat(value.strip())
     except ValueError:
@@ -91,7 +88,7 @@ def infer_column_type(values: Iterable[str | None]) -> str:
     present = [v for v in values if v is not None and v != ""]
     if not present:
         return "text"
-    for logical, conforms in (("integer", _is_integer), ("real", _is_real), ("date", _is_date)):
+    for logical, conforms in (("integer", _is_integer), ("real", _is_real), ("date", is_iso_date)):
         if all(conforms(v) for v in present):
             return logical
     return "text"
@@ -108,7 +105,7 @@ def _coerce(value: str | None, logical: str) -> int | float | str | None:
         return int(value)
     if logical == "real" and _is_real(value):
         return float(value)
-    if logical == "date" and _is_date(value):
+    if logical == "date" and is_iso_date(value):
         return value.strip()
     return value
 

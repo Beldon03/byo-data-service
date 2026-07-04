@@ -3,8 +3,14 @@ import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import Request
+from fastapi import Depends, Request
+
+# SQLite INTEGER columns are 64-bit; Python ints that exceed this range
+# cannot be bound and must be rejected or demoted by callers.
+INT64_MIN = -(2**63)
+INT64_MAX = 2**63 - 1
 
 _REGISTRY_DDL = """
 CREATE TABLE IF NOT EXISTS _registry (
@@ -102,3 +108,6 @@ def _to_dataset(row: sqlite3.Row) -> Dataset:
 
 def get_db(request: Request) -> sqlite3.Connection:
     return request.app.state.db
+
+
+Connection = Annotated[sqlite3.Connection, Depends(get_db)]
