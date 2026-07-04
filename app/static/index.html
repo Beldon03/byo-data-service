@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bring Your Own Data</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; padding: 0 1rem; color: #222; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.05rem; margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: .25rem; }
+  table { border-collapse: collapse; width: 100%; margin-top: .5rem; }
+  th, td { border: 1px solid #ccc; padding: .3rem .5rem; text-align: left; font-size: .9rem; }
+  th { background: #f5f5f5; }
+  button { cursor: pointer; }
+  #error { color: #b00020; min-height: 1.2rem; margin-top: .75rem; font-size: .9rem; }
+  td.editable:hover { background: #eef2ff; cursor: pointer; }
+  td.null { color: #999; font-style: italic; }
+  textarea { width: 100%; font-family: monospace; box-sizing: border-box; }
+  .muted { color: #666; font-size: .85rem; }
+  .controls { margin-top: .5rem; display: flex; gap: .5rem; align-items: center; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>Bring Your Own Data</h1>
+<p class="muted">Upload CSV files, browse and edit the ingested datasets, or run read-only SQL. Full API docs at <a href="/docs">/docs</a>.</p>
+<div id="error"></div>
+
+<h2>Upload</h2>
+<input type="file" id="file" accept=".csv,text/csv">
+<button id="upload-button">Upload</button>
+
+<h2>Datasets</h2>
+<div id="datasets" class="muted">No datasets yet.</div>
+
+<h2 id="rows-title" hidden></h2>
+<div id="rows-controls" class="controls" hidden>
+  <button id="prev-button">Prev</button>
+  <span id="page-info" class="muted"></span>
+  <button id="next-button">Next</button>
+  <button id="insert-button">Insert row</button>
+  <span class="muted">Click a cell to edit; empty input stores NULL.</span>
+</div>
+<div id="rows"></div>
+
+<h2>Query (read-only SQL)</h2>
+<textarea id="sql" rows="3" placeholder="SELECT * FROM ds_sales LIMIT 10"></textarea>
+<div class="controls"><button id="run-button">Run</button></div>
+<div id="query-result"></div>
+
+<script>
+"use strict";
+
+const LIMIT = 20;
+const state = { dataset: null, columns: [], offset: 0, total: 0 };
+
+const $ = (id) => document.getElementById(id);
+const setError = (message) => { $("error").textContent = message || ""; };
+
+async function api(path, options) {
+  const response = await fetch(path, options);
+  if (response.status === 204) return null;
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.detail || response.statusText);
+  return body;
+}
+
+function buildTable(columnNames, rows, cellBuilder) {
+  const table = document.createElement("table");
+  const head = table.createTHead().insertRow();
+  for (const columnName of columnNames) {
+    const th = document.createElement("th");
+    th.textContent = columnName;
+    head.appendChild(th);
+  }
+  const body = table.createTBody();
+  for (const row of rows) {
+    const tr = body.insertRow();
+    columnNames.forEach((columnName, index) => cellBuilder(tr.insertCell(), row, columnName, index));
+  }
+  return table;
+}
+
+function showValue(cell, value) {
+  if (value === null) {
+    cell.textContent = "NULL";
+    cell.classList.add("null");
+  } else {
+    cell.textContent = String(value);
+  }
+}
+
+function parseInput(raw, type) {
+  if (raw === "") return null;
+  if (type === "integer" || type === "real") {
+    const numeric = Number(raw);
+    if (Number.isNaN(numeric)) throw new Error(`${raw} is not a number`);
+    return numeric;
+  }
+  return raw;
+}
+
+async function refreshDatasets() {
+  const datasets = await api("/datasets");
+  const container = $("datasets");
+  container.textContent = "";
+  container.className = "";
+  if (!datasets.length) {
+    container.textContent = "No datasets yet.";
+    container.className = "muted";
+    return;
+  }
+  const table = buildTable(["name", "rows", "created", "", ""], datasets, (cell, dataset, _c, index) => {
+    if (index === 0) {
+      const link = document.createElement("a");
+      link.href = "#";
+      link.textContent = dataset.name;
+      link.onclick = (event) => { event.preventDefault(); openDataset(dataset.name); };
+      cell.appendChild(link);
+    } else if (index === 1) {
+      cell.textContent = String(dataset.row_count);
+    } else if (index === 2) {
+      cell.textContent = dataset.created_at.replace("T", " ").slice(0, 19);
+    } else if (index === 3) {
+      const button = document.createElement("button");
+      button.textContent = "Schema";
+      button.onclick = () => showSchema(dataset.name);
+      cell.appendChild(button);
+    } else {
+      const button = document.createElement("button");
+      button.textContent = "Delete";
+      button.onclick = () => deleteDataset(dataset.name);
+      cell.appendChild(button);
+    }
+  });
+  container.appendChild(table);
+}
+
+async function upload() {
+  const input = $("file");
+  if (!input.files.length) { setError("choose a CSV file first"); return; }
+  const form = new FormData();
+  form.append("file", input.files[0]);
+  try {
+    setError("");
+    const created = await api("/datasets", { method: "POST", body: form });
+    input.value = "";
+    await refreshDatasets();
+    await openDataset(created.name);
+  } catch (error) { setError(error.message); }
+}
+
+async function showSchema(name) {
+  try {
+    const schema = await api(`/datasets/${name}/schema`);
+    alert(schema.columns.map((column) => `${column.name}: ${column.type}`).join("\n"));
+  } catch (error) { setError(error.message); }
+}
+
+async function deleteDataset(name) {
+  if (!confirm(`Delete dataset '${name}'?`)) return;
+  try {
+    setError("");
+    await api(`/datasets/${name}`, { method: "DELETE" });
+    if (state.dataset === name) {
+      state.dataset = null;
+      $("rows-title").hidden = true;
+      $("rows-controls").hidden = true;
+      $("rows").textContent = "";
+    }
+    await refreshDatasets();
+  } catch (error) { setError(error.message); }
+}
+
+async function openDataset(name) {
+  try {
+    setError("");
+    const schema = await api(`/datasets/${name}/schema`);
+    state.dataset = name;
+    state.columns = schema.columns;
+    state.offset = 0;
+    await loadRows();
+  } catch (error) { setError(error.message); }
+}
+
+async function loadRows() {
+  const page = await api(`/datasets/${state.dataset}/rows?limit=${LIMIT}&offset=${state.offset}`);
+  state.total = page.total;
+  $("rows-title").hidden = false;
+  $("rows-title").textContent = `Rows: ${state.dataset}`;
+  $("rows-controls").hidden = false;
+  const first = page.total === 0 ? 0 : state.offset + 1;
+  const last = Math.min(state.offset + LIMIT, page.total);
+  $("page-info").textContent = `${first}-${last} of ${page.total}`;
+  const columnNames = ["_row_id", ...state.columns.map((column) => column.name), ""];
+  const container = $("rows");
+  container.textContent = "";
+  container.appendChild(buildTable(columnNames, page.rows, (cell, row, columnName, index) => {
+    if (index === 0) {
+      cell.textContent = String(row._row_id);
+    } else if (index === columnNames.length - 1) {
+      const button = document.createElement("button");
+      button.textContent = "Delete";
+      button.onclick = () => deleteRow(row._row_id);
+      cell.appendChild(button);
+    } else {
+      showValue(cell, row[columnName]);
+      cell.classList.add("editable");
+      const type = state.columns[index - 1].type;
+      cell.onclick = () => editCell(row._row_id, columnName, type, row[columnName]);
+    }
+  }));
+}
+
+async function editCell(rowId, columnName, type, currentValue) {
+  const raw = prompt(`${columnName} (${type}):`, currentValue === null ? "" : String(currentValue));
+  if (raw === null) return;
+  try {
+    setError("");
+    const value = parseInput(raw, type);
+    await api(`/datasets/${state.dataset}/rows/${rowId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [columnName]: value }),
+    });
+    await loadRows();
+    await refreshDatasets();
+  } catch (error) { setError(error.message); }
+}
+
+async function insertRow() {
+  const payload = {};
+  for (const column of state.columns) {
+    const raw = prompt(`${column.name} (${column.type}), empty = NULL:`, "");
+    if (raw === null) return;
+    try {
+      payload[column.name] = parseInput(raw, column.type);
+    } catch (error) { setError(error.message); return; }
+  }
+  try {
+    setError("");
+    await api(`/datasets/${state.dataset}/rows`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    await loadRows();
+    await refreshDatasets();
+  } catch (error) { setError(error.message); }
+}
+
+async function deleteRow(rowId) {
+  if (!confirm(`Delete row ${rowId}?`)) return;
+  try {
+    setError("");
+    await api(`/datasets/${state.dataset}/rows/${rowId}`, { method: "DELETE" });
+    if (state.offset >= state.total - 1 && state.offset > 0) state.offset -= LIMIT;
+    await loadRows();
+    await refreshDatasets();
+  } catch (error) { setError(error.message); }
+}
+
+function page(direction) {
+  const next = state.offset + direction * LIMIT;
+  if (next < 0 || next >= state.total) return;
+  state.offset = next;
+  loadRows().catch((error) => setError(error.message));
+}
+
+async function runQuery() {
+  try {
+    setError("");
+    const result = await api("/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sql: $("sql").value }),
+    });
+    const container = $("query-result");
+    container.textContent = "";
+    if (!result.rows.length) {
+      container.textContent = "No rows.";
+      container.className = "muted";
+      return;
+    }
+    container.className = "";
+    container.appendChild(buildTable(result.columns, result.rows, (cell, row, _c, index) => {
+      showValue(cell, row[index]);
+    }));
+  } catch (error) { setError(error.message); }
+}
+
+$("upload-button").onclick = upload;
+$("prev-button").onclick = () => page(-1);
+$("next-button").onclick = () => page(1);
+$("insert-button").onclick = insertRow;
+$("run-button").onclick = runQuery;
+refreshDatasets().catch((error) => setError(error.message));
+</script>
+</body>
+</html>

@@ -2,9 +2,10 @@ import os
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app import db
 from app.ingestion import CsvError
@@ -42,6 +43,10 @@ def create_app(db_path: str | None = None) -> FastAPI:
     app.include_router(datasets.router)
     app.include_router(rows.router)
     app.include_router(query.router)
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> FileResponse:
+        return FileResponse(Path(__file__).parent / "static" / "index.html")
 
     @app.exception_handler(CsvError)
     async def csv_error_handler(request: Request, exc: CsvError) -> JSONResponse:
