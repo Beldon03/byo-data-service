@@ -74,7 +74,7 @@
         <mxCell id="e4" value="DDL + bulk insert&#xa;(one transaction)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.8;labelBackgroundColor=#ffffff;fontSize=11;" edge="1" parent="1" source="ing" target="cyl">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e5" value="read/write connection" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.2;labelBackgroundColor=#ffffff;fontSize=11;" edge="1" parent="1" source="rr" target="cyl">
+        <mxCell id="e5" value="read/write connection&#xa;row CRUD, registry, DROP TABLE" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.35;entryX=0;entryY=0.2;labelBackgroundColor=#ffffff;fontSize=11;" edge="1" parent="1" source="fapi" target="cyl">
           <mxGeometry x="0.35" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="950" y="336" />
