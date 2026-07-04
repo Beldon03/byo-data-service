@@ -170,12 +170,18 @@ def _normalize(rows: list[list[str]], width: int) -> list[list[str | None]]:
 
 
 def ingest_csv(conn: sqlite3.Connection, name: str, data: bytes) -> db.Dataset:
+    header, raw_rows = _parse(_decode(data))
+    return ingest_rows(conn, name, header, raw_rows)
+
+
+def ingest_rows(
+    conn: sqlite3.Connection, name: str, header: list[str], raw_rows: list[list[str]]
+) -> db.Dataset:
     # The name is interpolated into DDL below, so enforce the slug invariant
     # here rather than trusting every caller to have used dataset_slug().
     if not name or name != _sanitize_identifier(name):
         raise ValueError(f"dataset name {name!r} must be a sanitized slug")
 
-    header, raw_rows = _parse(_decode(data))
     column_names = sanitize_headers(header)
     if len(column_names) > MAX_COLUMNS:
         raise CsvError(f"CSV has {len(column_names)} columns; the limit is {MAX_COLUMNS}")

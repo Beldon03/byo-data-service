@@ -2,7 +2,7 @@ import sqlite3
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
-from app import db, ingestion
+from app import db, ingestion, xlsx
 from app.models import ColumnSchema, DatasetCreated, DatasetSchema, DatasetSummary
 
 router = APIRouter(prefix="/datasets", tags=["datasets"])
@@ -21,7 +21,12 @@ async def upload_dataset(file: UploadFile, conn: db.Connection) -> DatasetCreate
     if db.get_dataset(conn, name) is not None:
         raise HTTPException(409, f"dataset {name!r} already exists")
 
-    dataset = ingestion.ingest_csv(conn, name, await file.read())
+    data = await file.read()
+    if (file.filename or "").lower().endswith(".xlsx"):
+        header, rows = xlsx.parse_xlsx(data)
+        dataset = ingestion.ingest_rows(conn, name, header, rows)
+    else:
+        dataset = ingestion.ingest_csv(conn, name, data)
     conn.commit()
     return DatasetCreated(
         name=dataset.name,
