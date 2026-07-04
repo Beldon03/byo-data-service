@@ -146,7 +146,7 @@ A single row is available at `GET /datasets/sales/rows/2`.
 ### Insert a row (missing columns become NULL)
 
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"order_id":3,"amount":7.5,"ordered_on":"2026-01-17"}' http://localhost:8000/datasets/sales/rows
+curl -X POST -H "Content-Type: application/json" -d "{\"order_id\":3,\"amount\":7.5,\"ordered_on\":\"2026-01-17\"}" http://localhost:8000/datasets/sales/rows
 ```
 
 ```json
@@ -156,7 +156,7 @@ curl -X POST -H "Content-Type: application/json" -d '{"order_id":3,"amount":7.5,
 ### Update a row (partial; returns the full updated row)
 
 ```bash
-curl -X PATCH -H "Content-Type: application/json" -d '{"amount":8.0}' http://localhost:8000/datasets/sales/rows/3
+curl -X PATCH -H "Content-Type: application/json" -d "{\"amount\":8.0}" http://localhost:8000/datasets/sales/rows/3
 ```
 
 ```json
@@ -166,7 +166,7 @@ curl -X PATCH -H "Content-Type: application/json" -d '{"amount":8.0}' http://loc
 ### Read-only SQL across datasets
 
 ```bash
-curl -X POST -H "Content-Type: application/json" -d '{"sql":"SELECT ordered_on, SUM(amount) AS total FROM ds_sales GROUP BY ordered_on"}' http://localhost:8000/query
+curl -X POST -H "Content-Type: application/json" -d "{\"sql\":\"SELECT ordered_on, SUM(amount) AS total FROM ds_sales GROUP BY ordered_on\"}" http://localhost:8000/query
 ```
 
 ```json
