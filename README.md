@@ -66,6 +66,13 @@ curl -F "file=@sales.csv" http://localhost:8000/datasets
 {"name":"sales","table":"ds_sales","columns":[{"name":"order_id","type":"integer"},{"name":"amount","type":"real"},{"name":"ordered_on","type":"date"},{"name":"note","type":"text"}],"row_count":2}
 ```
 
+To upload your own file, pass its path after `@` — the dataset takes its name
+from the filename:
+
+```bash
+curl -F "file=@/path/to/My Data.csv" http://localhost:8000/datasets   # dataset "my_data"
+```
+
 XLSX works the same way (`curl -F "file=@report.xlsx" ...`); the active sheet
 is ingested through the same pipeline.
 
