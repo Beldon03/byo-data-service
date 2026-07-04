@@ -17,9 +17,14 @@ def parse_xlsx(data: bytes) -> tuple[list[str], list[list[str]]]:
         # (BadZipFile, InvalidFileException, KeyError, ...).
         raise CsvError("file is not a valid XLSX workbook") from exc
     try:
-        sheet = workbook.active
+        # The active tab can be a chartsheet, which holds no cells; prefer it
+        # when usable, otherwise fall back to the first real worksheet.
+        # (openpyxl 3.1.x often fails to load chartsheet-bearing workbooks at
+        # all; that surfaces through the except above as a 400.)
+        candidates = (workbook.active, *workbook.worksheets)
+        sheet = next((s for s in candidates if s is not None and hasattr(s, "iter_rows")), None)
         if sheet is None:
-            raise CsvError("XLSX workbook has no sheets")
+            raise CsvError("XLSX workbook has no data sheets")
         raw = [list(row) for row in sheet.iter_rows(values_only=True)]
     finally:
         workbook.close()

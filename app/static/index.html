@@ -217,7 +217,7 @@ async function loadRows() {
 }
 
 async function editCell(rowId, columnName, type, currentValue) {
-  if (type === "integer" && currentValue !== null && !Number.isSafeInteger(currentValue)) {
+  if (type === "integer" && typeof currentValue === "number" && !Number.isSafeInteger(currentValue)) {
     setError(`${columnName} holds a value beyond JavaScript's exact integer range; edit it via the API`);
     return;
   }

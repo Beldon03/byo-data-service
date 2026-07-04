@@ -58,6 +58,27 @@ def test_phantom_rows_and_columns_are_trimmed() -> None:
     assert rows == [["1", ""]]
 
 
+def test_chartsheet_workbooks_never_crash() -> None:
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(["a"])
+    sheet.append([1])
+    workbook.active = workbook.create_chartsheet()
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+
+    # openpyxl 3.1.x cannot load chartsheet-bearing workbooks (reader bug);
+    # the contract is that such files surface as a 400-bound CsvError, never
+    # an unhandled exception. If a future openpyxl loads them, the sheet
+    # fallback must pick the data worksheet.
+    try:
+        header, rows = xlsx.parse_xlsx(buffer.getvalue())
+    except CsvError:
+        return
+    assert header == ["a"]
+    assert rows == [["1"]]
+
+
 def test_invalid_bytes_are_rejected() -> None:
     with pytest.raises(CsvError, match="not a valid XLSX"):
         xlsx.parse_xlsx(b"definitely not a workbook")
