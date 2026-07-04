@@ -79,7 +79,9 @@ is ingested through the same pipeline.
 ### Upload multiple files at once
 
 ```bash
-curl -F "files=@sales.csv" -F "files=@customers.csv" http://localhost:8000/datasets/batch
+printf 'customer_id,name\n1,ann\n2,bo\n' > customers.csv
+printf 'sku,qty\n1,5\n' > inventory.csv
+curl -F "files=@customers.csv" -F "files=@inventory.csv" http://localhost:8000/datasets/batch
 ```
 
 Returns the list of created datasets. The batch is atomic: if any file fails
