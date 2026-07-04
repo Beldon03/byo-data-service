@@ -4,3 +4,8 @@ __pycache__/
 .ruff_cache/
 .venv/
 *.db
+
+# sample files created by the README walkthrough
+sales.csv
+customers.csv
+inventory.csv
