@@ -41,6 +41,9 @@ on Windows. Every request can also be executed from the Swagger UI at
 ### Windows (PowerShell) notes
 
 - `curl` in PowerShell is an alias for `Invoke-WebRequest`; use `curl.exe`.
+- Bash line continuations (`\`) are not valid in PowerShell, where the next
+  line runs as a separate command. Every example below is a single line, so
+  they paste safely into any shell.
 - Windows PowerShell 5.1 strips the inner double quotes when passing JSON
   strings to native executables, so the `-d '{...}'` examples below can reach
   the server mangled. Use the Swagger UI, or `Invoke-RestMethod`:
@@ -75,7 +78,7 @@ curl -F "file=@sales.csv" http://localhost:8000/datasets
 {"name":"sales","table":"ds_sales","columns":[{"name":"order_id","type":"integer"},{"name":"amount","type":"real"},{"name":"ordered_on","type":"date"},{"name":"note","type":"text"}],"row_count":2}
 ```
 
-To upload your own file, pass its path after `@` — the dataset takes its name
+To upload your own file, pass its path after `@`; the dataset takes its name
 from the filename:
 
 ```bash
@@ -132,9 +135,7 @@ A single row is available at `GET /datasets/sales/rows/2`.
 ### Insert a row (missing columns become NULL)
 
 ```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"order_id":3,"amount":7.5,"ordered_on":"2026-01-17"}' \
-  http://localhost:8000/datasets/sales/rows
+curl -X POST -H "Content-Type: application/json" -d '{"order_id":3,"amount":7.5,"ordered_on":"2026-01-17"}' http://localhost:8000/datasets/sales/rows
 ```
 
 ```json
@@ -144,13 +145,25 @@ curl -X POST -H "Content-Type: application/json" \
 ### Update a row (partial; returns the full updated row)
 
 ```bash
-curl -X PATCH -H "Content-Type: application/json" \
-  -d '{"amount":8.0}' http://localhost:8000/datasets/sales/rows/3
+curl -X PATCH -H "Content-Type: application/json" -d '{"amount":8.0}' http://localhost:8000/datasets/sales/rows/3
 ```
 
 ```json
 {"_row_id":3,"order_id":3,"amount":8.0,"ordered_on":"2026-01-17","note":null}
 ```
+
+### Read-only SQL across datasets
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"sql":"SELECT ordered_on, SUM(amount) AS total FROM ds_sales GROUP BY ordered_on"}' http://localhost:8000/query
+```
+
+```json
+{"columns":["ordered_on","total"],"rows":[["2026-01-15",9.99],["2026-01-16",12.5],["2026-01-17",8.0]]}
+```
+
+Joins across `ds_*` tables work. Writes, DDL, `PRAGMA`, `ATTACH`, and any
+access to the internal `_registry` table are rejected with 400.
 
 ### Delete a row / delete a dataset
 
@@ -158,21 +171,6 @@ curl -X PATCH -H "Content-Type: application/json" \
 curl -X DELETE http://localhost:8000/datasets/sales/rows/3   # 204
 curl -X DELETE http://localhost:8000/datasets/sales          # 204, drops the table
 ```
-
-### Read-only SQL across datasets
-
-```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT ordered_on, SUM(amount) AS total FROM ds_sales GROUP BY ordered_on"}' \
-  http://localhost:8000/query
-```
-
-```json
-{"columns":["ordered_on","total"],"rows":[["2026-01-15",9.99],["2026-01-16",12.5]]}
-```
-
-Joins across `ds_*` tables work. Writes, DDL, `PRAGMA`, `ATTACH`, and any
-access to the internal `_registry` table are rejected with 400.
 
 ### Error semantics
 
@@ -189,14 +187,14 @@ Every error body is `{"detail": "<human-readable message>"}`.
 
 - **SQLite over Postgres.** One command, one container, zero configuration; a
   DB file on a named volume gives persistence. Tradeoff: single writer, no
-  concurrent scaling — which the brief explicitly does not require.
+  concurrent scaling, which the brief explicitly does not require.
 - **One table per dataset (`ds_<slug>`), columns typed by inference.**
   Arbitrary unknown schemas rule out a fixed data model.
 - **Synthetic `_row_id` primary key.** A CSV cannot be trusted to contain a
   usable key, so every table gets `_row_id INTEGER PRIMARY KEY AUTOINCREMENT`
   and all row addressing uses it. A CSV column named `_row_id` is renamed.
 - **`_registry` metadata table.** Single source of truth for dataset names,
-  columns, logical types, and row counts — the service never introspects
+  columns, logical types, and row counts; the service never introspects
   `sqlite_master` at request time. Also the backbone of SQL-injection safety:
   only registry-validated or sanitizer-produced `[a-z0-9_]` identifiers are
   interpolated into SQL (always double-quoted); all values are bound
@@ -226,7 +224,7 @@ Every error body is `{"detail": "<human-readable message>"}`.
 - Type inference samples the first 1,000 rows; later non-conforming values
   are stored verbatim.
 - Dataset names come from the slugified filename; a duplicate name returns
-  409 — there is no overwrite.
+  409; there is no overwrite.
 - Dates are stored as ISO-8601 TEXT with logical type `date`.
 - XLSX ingests the active worksheet only; formulas are read as cached values.
 - `/query` returns at most 10,000 rows and aborts after 5 seconds.
