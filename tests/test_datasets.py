@@ -1,4 +1,4 @@
-import httpx
+import httpx2
 from fastapi.testclient import TestClient
 
 from app.main import create_app
@@ -8,7 +8,7 @@ SALES_CSV = b"order_id,amount,ordered_on,note\n1,9.99,2026-01-15,first\n2,12.50,
 
 def upload(
     client: TestClient, filename: str = "sales.csv", data: bytes = SALES_CSV
-) -> httpx.Response:
+) -> httpx2.Response:
     return client.post("/datasets", files={"file": (filename, data, "text/csv")})
 
 

@@ -1,4 +1,4 @@
-import httpx
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 
@@ -14,7 +14,7 @@ def seeded(client: TestClient) -> TestClient:
     return client
 
 
-def query(client: TestClient, sql: str) -> httpx.Response:
+def query(client: TestClient, sql: str) -> httpx2.Response:
     return client.post("/query", json={"sql": sql})
 
 

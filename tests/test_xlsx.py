@@ -2,7 +2,7 @@ import io
 from datetime import datetime
 from typing import Any
 
-import httpx
+import httpx2
 import openpyxl
 import pytest
 from fastapi.testclient import TestClient
@@ -94,7 +94,7 @@ def test_header_only_sheet_is_rejected() -> None:
         xlsx.parse_xlsx(build_xlsx([["a", "b"]]))
 
 
-def upload_xlsx(client: TestClient, filename: str, rows: list[list[Any]]) -> httpx.Response:
+def upload_xlsx(client: TestClient, filename: str, rows: list[list[Any]]) -> httpx2.Response:
     return client.post(
         "/datasets",
         files={
