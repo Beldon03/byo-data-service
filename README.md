@@ -1,9 +1,6 @@
 # Bring Your Own Data Service
 
-A containerized FastAPI service that ingests arbitrary CSV (and XLSX) files as
-independent datasets — one SQLite table per file, schema inferred from the data
-— and exposes a REST API for schema inspection, row CRUD, and read-only SQL
-queries. A minimal single-page UI is served at the root.
+A containerized FastAPI service that ingests arbitrary CSV (and XLSX) files as independent datasets. One SQLite table per file, schema inferred from the data and exposes a REST API for schema inspection, row CRUD, and read-only SQL queries. A minimal single-page UI is served at the root.
 
 ## Requirements
 
@@ -141,9 +138,7 @@ Every error body is `{"detail": "<human-readable message>"}`.
 **SQLite over Postgres.** The brief asks for a system an evaluator runs with
 one command and explicitly waives concurrency guarantees. SQLite keeps the
 whole system in a single container with zero configuration, and a file on a
-named volume gives durable persistence. The tradeoff — a single writer and no
-horizontal scaling — is exactly what the requirements say not to engineer for.
-The service uses one shared connection and async handlers, which serializes
+named volume gives durable persistence. The service uses one shared connection and async handlers, which serializes
 request handling on the event loop.
 
 **One table per dataset, created dynamically.** Arbitrary unknown schemas rule
@@ -158,7 +153,7 @@ A CSV column literally named `_row_id` is renamed during sanitization.
 
 **`_registry` metadata table.** Dataset name, table name, column names,
 logical types, row count, and creation time live in one registry table. All
-schema reads and column validation go through it — the service never
+schema reads and column validation go through it. The service never
 introspects `sqlite_master` at request time. It is also the backbone of
 identifier safety: table and column names cannot be bound parameters, so only
 registry-validated (or sanitizer-produced `[a-z0-9_]`) identifiers are ever
@@ -186,7 +181,7 @@ the header line, so free text containing `;` or `|` cannot garble a comma
 file). Encodings: UTF-8 (with or without BOM), UTF-16/UTF-32 with BOM, and a
 latin-1 fallback; files containing NUL bytes are rejected as binary. Ragged
 rows: too few fields are padded with NULL, too many fields reject the upload
-with 400 — a short row is usually a trailing-comma artifact, extra fields
+with 400 where a short row is usually a trailing-comma artifact, extra fields
 signal real corruption. XLSX support is an `openpyxl` branch that converts
 the active worksheet into the same header-plus-string-rows shape and feeds the
 shared pipeline, so both formats get identical inference and validation.
@@ -200,8 +195,8 @@ shared pipeline, so both formats get identical inference and validation.
 - **Type inference samples the first 1,000 rows**; later non-conforming
   values are stored verbatim rather than re-typing the column.
 - **Dataset names come from the uploaded filename**, slugified to
-  `[a-z0-9_]`. A name collision returns 409 — delete the existing dataset or
-  rename the file; there is no overwrite.
+  `[a-z0-9_]`. A name collision returns 409 when deleting the existing dataset or
+  renaming the file; there is no overwrite.
 - **Dates are stored as ISO-8601 TEXT** with a `date` logical type; SQLite
   has no native date storage class.
 - **XLSX ingests the active worksheet only**; formulas are read as their
