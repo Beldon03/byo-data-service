@@ -13,9 +13,9 @@ def create_app(db_path: str | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         conn = db.connect(path)
-        db.init_registry(conn)
-        app.state.db = conn
         try:
+            db.init_registry(conn)
+            app.state.db = conn
             yield
         finally:
             conn.close()
