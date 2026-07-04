@@ -2,6 +2,15 @@
 
 A containerized FastAPI service that ingests arbitrary CSV (and XLSX) files as independent datasets. One SQLite table per file, schema inferred from the data and exposes a REST API for schema inspection, row CRUD, and read-only SQL queries. A minimal single-page UI is served at the root.
 
+## Architecture
+
+![High-level architecture](docs/architecture.png)
+
+Uploads flow through a format-agnostic ingestion pipeline into one dynamically
+created SQLite table per dataset; row CRUD uses the shared read/write
+connection, while `/query` runs on a separate connection locked to read-only.
+The editable diagram source is at [docs/architecture.drawio](docs/architecture.drawio).
+
 ## Requirements
 
 Docker with the Compose plugin. Nothing else is installed on the host.
