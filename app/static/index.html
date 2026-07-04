@@ -91,13 +91,17 @@ function showValue(cell, value) {
 }
 
 function parseInput(raw, type) {
-  if (raw === "") return null;
   if (type === "integer" || type === "real") {
-    const numeric = Number(raw);
-    if (Number.isNaN(numeric)) throw new Error(`${raw} is not a number`);
+    const trimmed = raw.trim();
+    if (trimmed === "") return null;
+    const numeric = Number(trimmed);
+    if (!Number.isFinite(numeric)) throw new Error(`${raw} is not a number`);
+    if (type === "integer" && !Number.isSafeInteger(numeric)) {
+      throw new Error(`${raw} is outside the range this UI can edit exactly; use the API`);
+    }
     return numeric;
   }
-  return raw;
+  return raw === "" ? null : raw;
 }
 
 async function refreshDatasets() {
@@ -213,6 +217,10 @@ async function loadRows() {
 }
 
 async function editCell(rowId, columnName, type, currentValue) {
+  if (type === "integer" && currentValue !== null && !Number.isSafeInteger(currentValue)) {
+    setError(`${columnName} holds a value beyond JavaScript's exact integer range; edit it via the API`);
+    return;
+  }
   const raw = prompt(`${columnName} (${type}):`, currentValue === null ? "" : String(currentValue));
   if (raw === null) return;
   try {

@@ -35,7 +35,9 @@ async def run_query(request: QueryRequest, conn: db.QueryConnection) -> QueryRes
         rows = cursor.fetchmany(MAX_ROWS + 1)
     except sqlite3.Error as exc:
         message = str(exc)
-        if "interrupted" in message:
+        # sqlite reports a progress-handler abort as exactly "interrupted";
+        # substring matching would mislabel errors that merely contain it.
+        if message == "interrupted":
             message = f"execution exceeded the {TIMEOUT_SECONDS:g} second budget"
         raise HTTPException(400, f"query rejected: {message}") from exc
     finally:
