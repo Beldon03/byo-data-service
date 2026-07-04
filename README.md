@@ -27,27 +27,31 @@ docker compose run --rm api pytest
 
 Create a sample file:
 
-```bash
-printf 'order_id,amount,ordered_on,note\n1,9.99,2026-01-15,first\n2,12.50,2026-01-16,\n' > sales.csv
+```powershell
+@'
+order_id,amount,ordered_on,note
+1,9.99,2026-01-15,first
+2,12.50,2026-01-16,
+'@ | Set-Content -Path sales.csv -Encoding utf8
 ```
 
 ### Upload a file (dataset name = slugified filename)
 
-```bash
-curl -F "file=@sales.csv" http://localhost:8000/datasets
+```powershell
+curl.exe -F "file=@sales.csv" http://localhost:8000/datasets
 ```
 
 ```json
 {"name":"sales","table":"ds_sales","columns":[{"name":"order_id","type":"integer"},{"name":"amount","type":"real"},{"name":"ordered_on","type":"date"},{"name":"note","type":"text"}],"row_count":2}
 ```
 
-XLSX works the same way (`curl -F "file=@report.xlsx" ...`); the active sheet
+XLSX works the same way (`curl.exe -F "file=@report.xlsx" ...`); the active sheet
 is ingested through the same pipeline.
 
 ### List datasets
 
-```bash
-curl http://localhost:8000/datasets
+```powershell
+curl.exe http://localhost:8000/datasets
 ```
 
 ```json
@@ -56,8 +60,8 @@ curl http://localhost:8000/datasets
 
 ### Show a dataset's schema
 
-```bash
-curl http://localhost:8000/datasets/sales/schema
+```powershell
+curl.exe http://localhost:8000/datasets/sales/schema
 ```
 
 ```json
@@ -66,8 +70,8 @@ curl http://localhost:8000/datasets/sales/schema
 
 ### Browse rows (paginated)
 
-```bash
-curl "http://localhost:8000/datasets/sales/rows?limit=1&offset=1"
+```powershell
+curl.exe "http://localhost:8000/datasets/sales/rows?limit=1&offset=1"
 ```
 
 ```json
@@ -79,9 +83,9 @@ A single row is available at `GET /datasets/sales/rows/2`.
 
 ### Insert a row (missing columns become NULL)
 
-```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"order_id":3,"amount":7.5,"ordered_on":"2026-01-17"}' \
+```powershell
+curl.exe -X POST -H "Content-Type: application/json" `
+  -d '{"order_id":3,"amount":7.5,"ordered_on":"2026-01-17"}' `
   http://localhost:8000/datasets/sales/rows
 ```
 
@@ -91,8 +95,8 @@ curl -X POST -H "Content-Type: application/json" \
 
 ### Update a row (partial; returns the full updated row)
 
-```bash
-curl -X PATCH -H "Content-Type: application/json" \
+```powershell
+curl.exe -X PATCH -H "Content-Type: application/json" `
   -d '{"amount":8.0}' http://localhost:8000/datasets/sales/rows/3
 ```
 
@@ -102,16 +106,16 @@ curl -X PATCH -H "Content-Type: application/json" \
 
 ### Delete a row / delete a dataset
 
-```bash
-curl -X DELETE http://localhost:8000/datasets/sales/rows/3   # 204
-curl -X DELETE http://localhost:8000/datasets/sales          # 204, drops the table
+```powershell
+curl.exe -X DELETE http://localhost:8000/datasets/sales/rows/3   # 204
+curl.exe -X DELETE http://localhost:8000/datasets/sales          # 204, drops the table
 ```
 
 ### Read-only SQL across datasets
 
-```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT ordered_on, SUM(amount) AS total FROM ds_sales GROUP BY ordered_on"}' \
+```powershell
+curl.exe -X POST -H "Content-Type: application/json" `
+  -d '{"sql":"SELECT ordered_on, SUM(amount) AS total FROM ds_sales GROUP BY ordered_on"}' `
   http://localhost:8000/query
 ```
 
