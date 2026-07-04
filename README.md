@@ -42,9 +42,8 @@ on Windows. Every request can also be executed from the Swagger UI at
 
 - `curl` in PowerShell is an alias for `Invoke-WebRequest`; use `curl.exe`.
 - Bash line continuations (`\`) are not valid in PowerShell, where the next
-  line runs as a separate command. Paste the multi-line examples into bash,
-  Git Bash, or WSL as-is; in PowerShell, join them onto one line first (or
-  use the alternatives below).
+  line runs as a separate command. Every example below is a single line, so
+  they paste safely into any shell.
 - Windows PowerShell 5.1 strips the inner double quotes when passing JSON
   strings to native executables, so the `-d '{...}'` examples below reach the
   server as invalid JSON and fail with a 422 "JSON decode error". Two
@@ -147,9 +146,7 @@ A single row is available at `GET /datasets/sales/rows/2`.
 ### Insert a row (missing columns become NULL)
 
 ```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"order_id":3,"amount":7.5,"ordered_on":"2026-01-17"}' \
-  http://localhost:8000/datasets/sales/rows
+curl -X POST -H "Content-Type: application/json" -d '{"order_id":3,"amount":7.5,"ordered_on":"2026-01-17"}' http://localhost:8000/datasets/sales/rows
 ```
 
 ```json
@@ -159,9 +156,7 @@ curl -X POST -H "Content-Type: application/json" \
 ### Update a row (partial; returns the full updated row)
 
 ```bash
-curl -X PATCH -H "Content-Type: application/json" \
-  -d '{"amount":8.0}' \
-  http://localhost:8000/datasets/sales/rows/3
+curl -X PATCH -H "Content-Type: application/json" -d '{"amount":8.0}' http://localhost:8000/datasets/sales/rows/3
 ```
 
 ```json
@@ -171,9 +166,7 @@ curl -X PATCH -H "Content-Type: application/json" \
 ### Read-only SQL across datasets
 
 ```bash
-curl -X POST -H "Content-Type: application/json" \
-  -d '{"sql":"SELECT ordered_on, SUM(amount) AS total FROM ds_sales GROUP BY ordered_on"}' \
-  http://localhost:8000/query
+curl -X POST -H "Content-Type: application/json" -d '{"sql":"SELECT ordered_on, SUM(amount) AS total FROM ds_sales GROUP BY ordered_on"}' http://localhost:8000/query
 ```
 
 ```json
