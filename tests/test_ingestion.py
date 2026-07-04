@@ -194,6 +194,12 @@ def test_unsanitized_dataset_name_is_a_caller_error(conn: sqlite3.Connection) ->
         ingestion.ingest_csv(conn, 'x"; DROP TABLE _registry;--', b"a\n1\n")
 
 
+def test_binary_upload_is_rejected(conn: sqlite3.Connection) -> None:
+    png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+    with pytest.raises(ingestion.CsvError, match="binary"):
+        ingestion.ingest_csv(conn, "d", png_bytes)
+
+
 def test_dataset_slug_from_filename() -> None:
     assert ingestion.dataset_slug("Sales Report.csv") == "sales_report"
     assert ingestion.dataset_slug("data.v2.csv") == "data_v2"

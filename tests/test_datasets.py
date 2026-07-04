@@ -1,9 +1,14 @@
+import httpx
 from fastapi.testclient import TestClient
+
+from app.main import create_app
 
 SALES_CSV = b"order_id,amount,ordered_on,note\n1,9.99,2026-01-15,first\n2,12.50,2026-01-16,\n"
 
 
-def upload(client: TestClient, filename: str = "sales.csv", data: bytes = SALES_CSV):
+def upload(
+    client: TestClient, filename: str = "sales.csv", data: bytes = SALES_CSV
+) -> httpx.Response:
     return client.post("/datasets", files={"file": (filename, data, "text/csv")})
 
 
@@ -118,3 +123,28 @@ def test_delete_frees_the_name_for_reupload(client: TestClient) -> None:
 
 def test_delete_unknown_dataset_returns_404(client: TestClient) -> None:
     assert client.delete("/datasets/missing").status_code == 404
+
+
+def test_binary_upload_returns_400(client: TestClient) -> None:
+    response = upload(client, filename="image.csv", data=b"\x89PNG\r\n\x1a\n\x00\x00")
+
+    assert response.status_code == 400
+    assert "binary" in response.json()["detail"]
+
+
+def test_unhandled_error_rolls_back_the_transaction(monkeypatch) -> None:
+    import sqlite3
+
+    from app import db, ingestion
+
+    def explode(conn: sqlite3.Connection, name: str, data: bytes) -> db.Dataset:
+        conn.execute('CREATE TABLE "ds_boom" (x)')
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(ingestion, "ingest_csv", explode)
+    with TestClient(create_app(db_path=":memory:"), raise_server_exceptions=False) as client:
+        response = upload(client, filename="boom.csv")
+
+        assert response.status_code == 500
+        assert response.json() == {"detail": "internal server error"}
+        assert not client.app.state.db.in_transaction

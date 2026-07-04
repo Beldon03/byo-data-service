@@ -114,6 +114,11 @@ def _coerce(value: str | None, logical: str) -> int | float | str | None:
 
 
 def _decode(data: bytes) -> str:
+    # NUL bytes appear in essentially every binary format (PNG, XLSX, zip)
+    # but never in CSV text; without this check the latin-1 fallback would
+    # happily decode binary uploads into garbage datasets.
+    if b"\x00" in data:
+        raise CsvError("file appears to be binary, not CSV text")
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:

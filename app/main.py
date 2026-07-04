@@ -37,6 +37,14 @@ def create_app(db_path: str | None = None) -> FastAPI:
         request.app.state.db.rollback()
         return JSONResponse(status_code=400, content={"detail": str(exc)})
 
+    @app.exception_handler(Exception)
+    async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        # Any unexpected failure (disk full mid-insert, ...) would otherwise
+        # leave an open transaction on the shared connection whose half-done
+        # work the next successful request commits.
+        request.app.state.db.rollback()
+        return JSONResponse(status_code=500, content={"detail": "internal server error"})
+
     return app
 
 
