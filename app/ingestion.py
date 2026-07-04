@@ -112,13 +112,19 @@ def _coerce(value: str | None, logical: str) -> int | float | str | None:
 
 
 def _decode(data: bytes) -> str:
-    # Excel commonly exports UTF-16 with a BOM; every second byte is NUL, so
-    # this must be handled before the binary check below can see the data.
-    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
-        try:
-            return data.decode("utf-16")
-        except UnicodeDecodeError as exc:
-            raise CsvError("file has a UTF-16 BOM but is not valid UTF-16") from exc
+    # Excel commonly exports UTF-16 with a BOM; both UTF-16 and UTF-32 are
+    # NUL-heavy, so they must be handled before the binary check below can
+    # see the data. UTF-32's little-endian BOM begins with UTF-16's, so the
+    # 4-byte BOMs are checked first.
+    for boms, encoding in (
+        ((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE), "utf-32"),
+        ((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE), "utf-16"),
+    ):
+        if data.startswith(boms):
+            try:
+                return data.decode(encoding)
+            except UnicodeDecodeError as exc:
+                raise CsvError(f"file has a {encoding} BOM but is not valid {encoding}") from exc
     # NUL bytes appear in essentially every binary format (PNG, XLSX, zip)
     # but never in CSV text; without this check the latin-1 fallback would
     # happily decode binary uploads into garbage datasets.

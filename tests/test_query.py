@@ -109,6 +109,42 @@ def test_unknown_table_returns_400(seeded: TestClient) -> None:
     assert "no such table" in response.json()["detail"]
 
 
+def test_blob_values_are_hex_encoded(seeded: TestClient) -> None:
+    response = query(seeded, "SELECT randomblob(4) AS b")
+
+    assert response.status_code == 200
+    value = response.json()["rows"][0][0]
+    assert len(value) == 8
+    int(value, 16)
+
+
+def test_result_row_cap(seeded: TestClient) -> None:
+    response = query(
+        seeded,
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i <= 10000)"
+        " SELECT i FROM n",
+    )
+
+    assert response.status_code == 400
+    assert "add a LIMIT" in response.json()["detail"]
+
+
+def test_runaway_query_hits_execution_budget(
+    seeded: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.routers import query as query_router
+
+    monkeypatch.setattr(query_router, "TIMEOUT_SECONDS", 0.05)
+    response = query(
+        seeded,
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n)"
+        " SELECT count(*) FROM n",
+    )
+
+    assert response.status_code == 400
+    assert "budget" in response.json()["detail"]
+
+
 def test_query_sees_rows_inserted_via_api(seeded: TestClient) -> None:
     seeded.post("/datasets/sales/rows", json={"order_id": 3, "amount": 1.0})
 

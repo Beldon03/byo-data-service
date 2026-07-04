@@ -201,6 +201,13 @@ def test_utf16_csv_with_bom_is_ingested(conn: sqlite3.Connection) -> None:
     assert fetch_all(conn, "ds_d")[0]["name"] == "ann"
 
 
+def test_utf32_csv_with_bom_is_ingested(conn: sqlite3.Connection) -> None:
+    dataset = ingest(conn, "d", "id,name\n1,ann\n", encoding="utf-32")
+
+    assert [c.name for c in dataset.columns] == ["id", "name"]
+    assert fetch_all(conn, "ds_d")[0]["name"] == "ann"
+
+
 def test_binary_upload_is_rejected(conn: sqlite3.Connection) -> None:
     png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
     with pytest.raises(ingestion.CsvError, match="binary"):
