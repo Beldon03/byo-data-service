@@ -51,11 +51,12 @@ on Windows. Every request can also be executed from the Swagger UI at
   at all):
 
   ```powershell
-  Invoke-RestMethod -Method Post -Uri http://localhost:8000/datasets/sales/rows -ContentType "application/json" -Body '{"order_id":3,"amount":7.5}'
+  Invoke-RestMethod -Method Post -Uri http://localhost:8000/datasets/sales/rows -ContentType "application/json" -Body '{"order_id":3,"amount":7.5,"ordered_on":"2026-01-17"}'
   ```
 
   ```powershell
-  curl.exe --% -X POST -H "Content-Type: application/json" -d "{\"order_id\":3,\"amount\":7.5}" http://localhost:8000/datasets/sales/rows
+  curl.exe --% -X POST -H "Content-Type: application/json" -d "{\"order_id\":3,\"amount\":7.5,\"ordered_on\":\"2026-01-17\"}" http://localhost:8000/datasets/sales/rows
+  curl.exe --% -X PATCH -H "Content-Type: application/json" -d "{\"amount\":8.0}" http://localhost:8000/datasets/sales/rows/3
   ```
 
   The `--%` stop-parsing token makes PowerShell pass the rest of the line
