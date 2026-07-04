@@ -45,12 +45,22 @@ on Windows. Every request can also be executed from the Swagger UI at
   line runs as a separate command. Every example below is a single line, so
   they paste safely into any shell.
 - Windows PowerShell 5.1 strips the inner double quotes when passing JSON
-  strings to native executables, so the `-d '{...}'` examples below can reach
-  the server mangled. Use the Swagger UI, or `Invoke-RestMethod`:
+  strings to native executables, so the `-d '{...}'` examples below reach the
+  server as invalid JSON and fail with a 422 "JSON decode error". Two
+  reliable alternatives (or use the Swagger UI, which has no shell quoting
+  at all):
 
   ```powershell
   Invoke-RestMethod -Method Post -Uri http://localhost:8000/datasets/sales/rows -ContentType "application/json" -Body '{"order_id":3,"amount":7.5}'
   ```
+
+  ```powershell
+  curl.exe --% -X POST -H "Content-Type: application/json" -d "{\"order_id\":3,\"amount\":7.5}" http://localhost:8000/datasets/sales/rows
+  ```
+
+  The `--%` stop-parsing token makes PowerShell pass the rest of the line
+  through untouched. PowerShell 7.3 and later fixed argument passing, so the
+  plain examples work there unchanged.
 
 - Create the sample file with:
 
