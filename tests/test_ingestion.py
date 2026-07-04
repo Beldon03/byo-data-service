@@ -139,11 +139,59 @@ def test_semicolon_delimiter_is_sniffed(conn: sqlite3.Connection) -> None:
 
 
 def test_nonconforming_value_beyond_sample_is_stored_verbatim(conn: sqlite3.Connection) -> None:
-    lines = "x\n" + "\n".join(str(i) for i in range(ingestion.SAMPLE_SIZE)) + "\nabc\n"
+    lines = "x\n" + "\n".join(str(i) for i in range(ingestion.SAMPLE_SIZE)) + "\nabc\n1_0\n"
     dataset = ingest(conn, "d", lines)
 
     assert dataset.columns[0].type == "integer"
-    assert fetch_all(conn, "ds_d")[-1]["x"] == "abc"
+    rows = fetch_all(conn, "ds_d")
+    assert rows[-2]["x"] == "abc"
+    assert rows[-1]["x"] == "1_0"
+
+
+def test_integers_beyond_64_bits_demote_to_real(conn: sqlite3.Connection) -> None:
+    dataset = ingest(conn, "d", "x\n99999999999999999999\n1\n")
+
+    assert dataset.columns[0].type == "real"
+    assert fetch_all(conn, "ds_d")[0]["x"] == 1e20
+
+
+def test_float_overflow_values_stay_text(conn: sqlite3.Connection) -> None:
+    dataset = ingest(conn, "d", "x\n1e400\n2.5\n")
+
+    assert dataset.columns[0].type == "text"
+    assert fetch_all(conn, "ds_d")[0]["x"] == "1e400"
+
+
+def test_oversized_field_is_rejected_as_malformed(conn: sqlite3.Connection) -> None:
+    huge = "a" * 200_000
+    with pytest.raises(ingestion.CsvError, match="malformed CSV"):
+        ingest(conn, "d", f'x\n"{huge}"\n')
+
+
+def test_semicolons_inside_text_do_not_fool_the_sniffer(conn: sqlite3.Connection) -> None:
+    dataset = ingest(conn, "d", "name,notes\nDoe; John,a\nRoe; Jane,b\n")
+
+    assert [c.name for c in dataset.columns] == ["name", "notes"]
+    assert fetch_all(conn, "ds_d")[0]["name"] == "Doe; John"
+
+
+def test_too_many_columns_rejected(conn: sqlite3.Connection) -> None:
+    header = ",".join(f"c{i}" for i in range(ingestion.MAX_COLUMNS + 1))
+    row = ",".join("1" for _ in range(ingestion.MAX_COLUMNS + 1))
+    with pytest.raises(ingestion.CsvError, match="limit is 2000"):
+        ingest(conn, "d", f"{header}\n{row}\n")
+
+
+def test_date_values_are_stored_stripped(conn: sqlite3.Connection) -> None:
+    dataset = ingest(conn, "d", "at\n 2026-01-01 \n2026-01-02\n")
+
+    assert dataset.columns[0].type == "date"
+    assert fetch_all(conn, "ds_d")[0]["at"] == "2026-01-01"
+
+
+def test_unsanitized_dataset_name_is_a_caller_error(conn: sqlite3.Connection) -> None:
+    with pytest.raises(ValueError, match="sanitized slug"):
+        ingestion.ingest_csv(conn, 'x"; DROP TABLE _registry;--', b"a\n1\n")
 
 
 def test_dataset_slug_from_filename() -> None:

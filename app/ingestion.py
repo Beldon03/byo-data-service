@@ -1,5 +1,6 @@
 import csv
 import io
+import math
 import re
 import sqlite3
 from collections.abc import Iterable
@@ -9,6 +10,10 @@ from pathlib import Path
 from app import db
 
 SAMPLE_SIZE = 1000
+MAX_COLUMNS = 2000  # SQLite's default SQLITE_MAX_COLUMN
+
+_SQLITE_INT_MIN = -(2**63)
+_SQLITE_INT_MAX = 2**63 - 1
 
 _SQL_TYPES = {"integer": "INTEGER", "real": "REAL", "date": "TEXT", "text": "TEXT"}
 _INT_RE = re.compile(r"^[+-]?\d+$")
@@ -53,7 +58,11 @@ def _is_integer(value: str) -> bool:
     if not _INT_RE.match(v):
         return False
     digits = v.lstrip("+-")
-    return len(digits) == 1 or not digits.startswith("0")
+    if len(digits) > 1 and digits.startswith("0"):
+        return False
+    # Python ints are unbounded but SQLite INTEGER is 64-bit; anything wider
+    # must demote (to real via the next inference step) or stay text.
+    return _SQLITE_INT_MIN <= int(v) <= _SQLITE_INT_MAX
 
 
 def _is_real(value: str) -> bool:
@@ -64,7 +73,10 @@ def _is_real(value: str) -> bool:
     # the zeros, so they must not be demoted to a numeric type.
     match = _LEADING_DIGITS_RE.match(v)
     integer_digits = match.group(1) if match else ""
-    return len(integer_digits) <= 1 or not integer_digits.startswith("0")
+    if len(integer_digits) > 1 and integer_digits.startswith("0"):
+        return False
+    # Values like 1e400 overflow float() to inf, which JSON cannot represent.
+    return not math.isinf(float(v))
 
 
 def _is_date(value: str) -> bool:
@@ -88,18 +100,16 @@ def infer_column_type(values: Iterable[str | None]) -> str:
 def _coerce(value: str | None, logical: str) -> int | float | str | None:
     if value is None or value == "":
         return None
-    # Inference only samples the first SAMPLE_SIZE rows, so later rows may
-    # not conform; store those verbatim rather than failing the ingest.
-    if logical == "integer":
-        try:
-            return int(value)
-        except ValueError:
-            return value
-    if logical == "real":
-        try:
-            return float(value)
-        except ValueError:
-            return value
+    # Conversion is gated on the same validators inference used, so the two
+    # can never disagree (int() alone would also accept '1_0' or overflow
+    # SQLite's 64-bit range). Rows beyond the sampled prefix may not conform;
+    # those are stored verbatim rather than failing the ingest.
+    if logical == "integer" and _is_integer(value):
+        return int(value)
+    if logical == "real" and _is_real(value):
+        return float(value)
+    if logical == "date" and _is_date(value):
+        return value.strip()
     return value
 
 
@@ -110,14 +120,23 @@ def _decode(data: bytes) -> str:
         return data.decode("latin-1")
 
 
+def _detect_dialect(text: str) -> csv.Dialect | type[csv.Dialect]:
+    try:
+        dialect = csv.Sniffer().sniff(text[:65536], delimiters=",;\t|")
+    except csv.Error:
+        return csv.excel
+    # A text column that consistently contains ';' or '|' can fool the
+    # sniffer; only trust its verdict if the delimiter occurs in the header.
+    if dialect.delimiter not in text.split("\n", 1)[0]:
+        return csv.excel
+    return dialect
+
+
 def _parse(text: str) -> tuple[list[str], list[list[str]]]:
     try:
-        dialect: csv.Dialect | type[csv.Dialect] = csv.Sniffer().sniff(
-            text[:65536], delimiters=",;\t|"
-        )
-    except csv.Error:
-        dialect = csv.excel
-    rows = [row for row in csv.reader(io.StringIO(text), dialect) if row]
+        rows = [row for row in csv.reader(io.StringIO(text), _detect_dialect(text)) if row]
+    except csv.Error as exc:
+        raise CsvError(f"malformed CSV: {exc}") from exc
     if not rows:
         raise CsvError("CSV file is empty")
     if len(rows) == 1:
@@ -135,8 +154,15 @@ def _normalize(rows: list[list[str]], width: int) -> list[list[str | None]]:
 
 
 def ingest_csv(conn: sqlite3.Connection, name: str, data: bytes) -> db.Dataset:
+    # The name is interpolated into DDL below, so enforce the slug invariant
+    # here rather than trusting every caller to have used dataset_slug().
+    if not name or name != _sanitize_identifier(name):
+        raise ValueError(f"dataset name {name!r} must be a sanitized slug")
+
     header, raw_rows = _parse(_decode(data))
     column_names = sanitize_headers(header)
+    if len(column_names) > MAX_COLUMNS:
+        raise CsvError(f"CSV has {len(column_names)} columns; the limit is {MAX_COLUMNS}")
     rows = _normalize(raw_rows, len(column_names))
 
     sample = rows[:SAMPLE_SIZE]
